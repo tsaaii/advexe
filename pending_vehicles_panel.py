@@ -42,21 +42,17 @@ class PendingVehiclesPanel:
         refresh_btn.pack(side=tk.RIGHT, padx=5)
         
         # Create treeview for pending vehicles
-        columns = ("ticket", "vehicle", "agency", "first_weight", "timestamp")
+        columns = ("ticket", "vehicle", "timestamp")
         self.tree = ttk.Treeview(main_frame, columns=columns, show="headings", height=6)
         
         # Define column headings
-        self.tree.heading("ticket", text="Ticket №")
-        self.tree.heading("vehicle", text="Vehicle №")
-        self.tree.heading("agency", text="Agency")
-        self.tree.heading("first_weight", text="First Weight")
+        self.tree.heading("ticket", text="Ticket No")
+        self.tree.heading("vehicle", text="Vehicle No")
         self.tree.heading("timestamp", text="Time")
         
         # Define column widths
         self.tree.column("ticket", width=70)
         self.tree.column("vehicle", width=90)
-        self.tree.column("agency", width=90)
-        self.tree.column("first_weight", width=80)
         self.tree.column("timestamp", width=80)
         
         # Add scrollbar
@@ -69,12 +65,6 @@ class PendingVehiclesPanel:
         
         # Bind double-click event
         self.tree.bind("<Double-1>", self.on_item_double_click)
-        
-        # Instructions label
-        instructions = ttk.Label(main_frame, 
-                                text="Double-click a vehicle to complete second weighment",
-                                font=("Segoe UI", 8, "italic"))
-        instructions.pack(fill=tk.X, pady=2)
         
         # Populate the list initially
         self.refresh_pending_list()
@@ -103,8 +93,6 @@ class PendingVehiclesPanel:
             self.tree.insert("", tk.END, values=(
                 record.get('ticket_no', ''),
                 record.get('vehicle_no', ''),
-                record.get('agency_name', ''),
-                record.get('first_weight', ''),
                 self.format_timestamp(record.get('first_timestamp', ''))
             ))
         
