@@ -14,12 +14,13 @@ from data_management import DataManager
 from reports import export_to_excel, export_to_pdf
 from admin_panel import AdminPanel
 from app_login import LoginDialog
+from pending_vehicles_panel import PendingVehiclesPanel
 
 class TharuniApp:
-    """Main application class"""
+    """Main application class with admin functionality"""
     
     def __init__(self, root):
-        """Initialize the application
+        """Initialize the application with authentication
         
         Args:
             root: Root Tkinter window
@@ -46,7 +47,7 @@ class TharuniApp:
         self.is_admin = False
         self.authenticate_user()
         
-        # Initialize UI components
+        # Initialize UI components if login successful
         if self.logged_in_user:
             self.create_widgets()
             
@@ -124,7 +125,7 @@ class TharuniApp:
         self.update_form_options()
     
     def create_header(self, parent):
-        """Create header with title and date/time"""
+        """Create header with title, user info, and date/time"""
         # Title with company logo effect
         header_frame = ttk.Frame(parent, style="TFrame")
         header_frame.pack(fill=tk.X, pady=(0, 5))
@@ -194,7 +195,7 @@ class TharuniApp:
         time_label.grid(row=0, column=3, sticky="w")
     
     def create_main_panel(self, parent):
-        """Create main panel with scrollable frame"""
+        """Create main panel with form and pending vehicles list"""
         # Main panel to hold everything with scrollable frame for small screens
         main_panel = ttk.Frame(parent, style="TFrame")
         main_panel.pack(fill=tk.BOTH, expand=True)
@@ -234,7 +235,6 @@ class TharuniApp:
         )
         
         # Create the pending vehicles panel on the right
-        from pending_vehicles_panel import PendingVehiclesPanel
         self.pending_vehicles = PendingVehiclesPanel(
             right_panel,
             data_manager=self.data_manager,
@@ -246,11 +246,7 @@ class TharuniApp:
         canvas.configure(scrollregion=canvas.bbox("all"))
     
     def load_pending_vehicle(self, ticket_no):
-        """Load a pending vehicle when selected from the pending vehicles panel
-        
-        Args:
-            ticket_no: Ticket number to load
-        """
+        """Load a pending vehicle when selected from the pending vehicles panel"""
         if hasattr(self, 'main_form'):
             # Switch to main tab
             self.notebook.select(0)
@@ -320,11 +316,7 @@ class TharuniApp:
         self.root.after(60000, self.periodic_refresh)  # Refresh every minute
     
     def update_weight_from_weighbridge(self, weight):
-        """Update weight from weighbridge
-        
-        Args:
-            weight: Weight value from weighbridge
-        """
+        """Update weight from weighbridge"""
         # Make the weight available to the main form
         if hasattr(self, 'settings_panel'):
             self.settings_panel.current_weight_var.set(f"{weight} kg")
@@ -334,12 +326,7 @@ class TharuniApp:
             self.settings_panel.update_weight_display(weight)
     
     def update_camera_indices(self, front_index, back_index):
-        """Update camera indices
-        
-        Args:
-            front_index: Front camera index
-            back_index: Back camera index
-        """
+        """Update camera indices"""
         if hasattr(self, 'main_form'):
             # Stop cameras if running
             if hasattr(self.main_form, 'front_camera'):
@@ -351,12 +338,7 @@ class TharuniApp:
                 self.main_form.back_camera.camera_index = back_index
     
     def update_form_options(self, site_names=None, agency_names=None):
-        """Update form dropdown options from admin settings
-        
-        Args:
-            site_names: List of site names (optional)
-            agency_names: List of agency names (optional)
-        """
+        """Update form dropdown options from admin settings"""
         # Get settings if not provided
         if site_names is None or agency_names is None:
             settings = self.admin_panel.get_settings()
@@ -365,38 +347,71 @@ class TharuniApp:
         
         # Update main form if it exists
         if hasattr(self, 'main_form'):
-            # Update site dropdown
-            if hasattr(self.main_form, 'site_combo') and site_names:
-                self.main_form.site_combo['values'] = tuple(site_names)
-                # Set to first site if current value not in list
-                if self.main_form.site_var.get() not in site_names and site_names:
-                    self.main_form.site_var.set(site_names[0])
+            # Look for the form_frame (LabelFrame containing form components)
+            form_frame = None
+            for child in self.main_form.parent.winfo_children():
+                if isinstance(child, ttk.LabelFrame) and "Vehicle Information" in child.cget("text"):
+                    form_frame = child
+                    break
             
-            # Update agency field to be combobox if agency names exist
-            if hasattr(self.main_form, 'agency_entry') and agency_names:
-                # Convert agency entry to combobox if it's not already
-                if not hasattr(self.main_form, 'agency_combo'):
-                    # Get current value
-                    current_value = self.main_form.agency_var.get()
-                    
-                    # Remove entry widget
-                    self.main_form.agency_entry.destroy()
-                    
-                    # Create combobox
-                    self.main_form.agency_combo = ttk.Combobox(
-                        self.main_form.form_inner, 
-                        textvariable=self.main_form.agency_var,
-                        values=tuple(agency_names),
-                        width=config.STD_WIDTH
-                    )
-                    self.main_form.agency_combo.grid(row=1, column=1, sticky=tk.W, padx=3, pady=3)
-                    
-                    # Restore value
-                    if current_value:
-                        self.main_form.agency_var.set(current_value)
-                else:
-                    # Just update values
-                    self.main_form.agency_combo['values'] = tuple(agency_names)
+            # If we found the form frame, look for its inner frame
+            if form_frame:
+                for child in form_frame.winfo_children():
+                    if isinstance(child, ttk.Frame):
+                        form_inner = child
+                        
+                        # Update site combobox - find it in row 1, column 0
+                        for widget in form_inner.grid_slaves(row=1, column=0):
+                            if isinstance(widget, ttk.Combobox):
+                                # Update values
+                                widget['values'] = tuple(site_names)
+                                
+                                # Store reference to this combo box
+                                self.main_form.site_combo = widget
+                                
+                                # Set to first site if current value not in list
+                                if self.main_form.site_var.get() not in site_names and site_names:
+                                    self.main_form.site_var.set(site_names[0])
+                                
+                                break
+                        
+                        # Update agency field - find it in row 1, column 1
+                        if agency_names:
+                            for widget in form_inner.grid_slaves(row=1, column=1):
+                                if isinstance(widget, ttk.Entry) or isinstance(widget, ttk.Combobox):
+                                    # Get current value
+                                    current_value = self.main_form.agency_var.get()
+                                    
+                                    # If entry, convert to combobox
+                                    if isinstance(widget, ttk.Entry):
+                                        # Destroy the entry
+                                        widget.destroy()
+                                        
+                                        # Create combobox
+                                        agency_combo = ttk.Combobox(
+                                            form_inner, 
+                                            textvariable=self.main_form.agency_var,
+                                            values=tuple(agency_names),
+                                            width=config.STD_WIDTH
+                                        )
+                                        agency_combo.grid(row=1, column=1, sticky=tk.W, padx=3, pady=3)
+                                        
+                                        # Store reference
+                                        self.main_form.agency_combo = agency_combo
+                                    else:
+                                        # Just update values for existing combobox
+                                        widget['values'] = tuple(agency_names)
+                                        self.main_form.agency_combo = widget
+                                    
+                                    # Restore value if in new list
+                                    if current_value in agency_names:
+                                        self.main_form.agency_var.set(current_value)
+                                    elif agency_names:
+                                        self.main_form.agency_var.set(agency_names[0])
+                                    
+                                    break
+                        
+                        break
     
     def save_record(self):
         """Save current record to database"""

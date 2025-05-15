@@ -18,6 +18,7 @@ class LoginDialog:
         self.admin_panel = admin_panel
         self.result = False  # Login success flag
         self.is_admin = False  # Admin access flag
+        self.username = None  # Store authenticated username
         
         # Create login window
         self.create_dialog()
