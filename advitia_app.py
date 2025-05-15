@@ -12,6 +12,8 @@ from summary_panel import SummaryPanel
 from settings_panel import SettingsPanel
 from data_management import DataManager
 from reports import export_to_excel, export_to_pdf
+from admin_panel import AdminPanel
+from app_login import LoginDialog
 
 class TharuniApp:
     """Main application class"""
@@ -36,17 +38,37 @@ class TharuniApp:
         # Initialize UI styles
         self.style = create_styles()
         
+        # Initialize admin panel (for authentication)
+        self.admin_panel = AdminPanel(None, self)
+        
+        # Show login dialog
+        self.logged_in_user = None
+        self.is_admin = False
+        self.authenticate_user()
+        
         # Initialize UI components
-        self.create_widgets()
+        if self.logged_in_user:
+            self.create_widgets()
+            
+            # Start time update
+            self.update_datetime()
+            
+            # Start periodic refresh for pending vehicles
+            self.periodic_refresh()
+            
+            # Add window close handler
+            self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+    
+    def authenticate_user(self):
+        """Show login dialog and authenticate user"""
+        login = LoginDialog(self.root, self.admin_panel)
         
-        # Start time update
-        self.update_datetime()
-        
-        # Start periodic refresh for pending vehicles
-        self.periodic_refresh()
-        
-        # Add window close handler
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        if login.result:
+            self.logged_in_user = login.username
+            self.is_admin = login.is_admin
+        else:
+            # Exit application if login failed or canceled
+            self.root.quit()
     
     def create_widgets(self):
         """Create all widgets and layout for the application"""
@@ -71,6 +93,14 @@ class TharuniApp:
         settings_tab = ttk.Frame(self.notebook, style="TFrame")
         self.notebook.add(settings_tab, text="Settings")
         
+        # Admin tab - only visible to admin users
+        if self.is_admin:
+            admin_tab = ttk.Frame(self.notebook, style="TFrame")
+            self.notebook.add(admin_tab, text="Administration")
+            
+            # Create admin panel
+            self.admin_panel = AdminPanel(admin_tab, self)
+        
         # Main panel with scrollable frame for small screens
         self.create_main_panel(main_tab)
         
@@ -89,6 +119,9 @@ class TharuniApp:
         button_container.pack(fill=tk.X, side=tk.BOTTOM, pady=5)
         
         self.create_buttons(button_container)
+        
+        # Update form options from admin settings
+        self.update_form_options()
     
     def create_header(self, parent):
         """Create header with title and date/time"""
@@ -106,6 +139,27 @@ class TharuniApp:
                               fg=config.COLORS["white"],
                               bg=config.COLORS["header_bg"])
         title_label.pack(side=tk.LEFT)
+        
+        # User info
+        user_frame = tk.Frame(title_box, bg=config.COLORS["header_bg"])
+        user_frame.pack(side=tk.LEFT, padx=20)
+        
+        user_label = tk.Label(user_frame, 
+                           text=f"User: {self.logged_in_user}" + (" (Admin)" if self.is_admin else ""),
+                           font=("Segoe UI", 9, "italic"),
+                           fg=config.COLORS["white"],
+                           bg=config.COLORS["header_bg"])
+        user_label.pack(side=tk.LEFT)
+        
+        # Add logout button
+        logout_btn = HoverButton(title_box, 
+                               text="Logout", 
+                               font=("Segoe UI", 9),
+                               bg=config.COLORS["button_alt"],
+                               fg=config.COLORS["white"],
+                               padx=5, pady=1,
+                               command=self.logout)
+        logout_btn.pack(side=tk.RIGHT, padx=(0, 10))
         
         # Date and time frame (right side of header)
         datetime_frame = tk.Frame(title_box, bg=config.COLORS["header_bg"])
@@ -296,6 +350,54 @@ class TharuniApp:
                 self.main_form.back_camera.stop_camera()
                 self.main_form.back_camera.camera_index = back_index
     
+    def update_form_options(self, site_names=None, agency_names=None):
+        """Update form dropdown options from admin settings
+        
+        Args:
+            site_names: List of site names (optional)
+            agency_names: List of agency names (optional)
+        """
+        # Get settings if not provided
+        if site_names is None or agency_names is None:
+            settings = self.admin_panel.get_settings()
+            site_names = settings.get('site_names', ['Guntur'])
+            agency_names = settings.get('agency_names', [])
+        
+        # Update main form if it exists
+        if hasattr(self, 'main_form'):
+            # Update site dropdown
+            if hasattr(self.main_form, 'site_combo') and site_names:
+                self.main_form.site_combo['values'] = tuple(site_names)
+                # Set to first site if current value not in list
+                if self.main_form.site_var.get() not in site_names and site_names:
+                    self.main_form.site_var.set(site_names[0])
+            
+            # Update agency field to be combobox if agency names exist
+            if hasattr(self.main_form, 'agency_entry') and agency_names:
+                # Convert agency entry to combobox if it's not already
+                if not hasattr(self.main_form, 'agency_combo'):
+                    # Get current value
+                    current_value = self.main_form.agency_var.get()
+                    
+                    # Remove entry widget
+                    self.main_form.agency_entry.destroy()
+                    
+                    # Create combobox
+                    self.main_form.agency_combo = ttk.Combobox(
+                        self.main_form.form_inner, 
+                        textvariable=self.main_form.agency_var,
+                        values=tuple(agency_names),
+                        width=config.STD_WIDTH
+                    )
+                    self.main_form.agency_combo.grid(row=1, column=1, sticky=tk.W, padx=3, pady=3)
+                    
+                    # Restore value
+                    if current_value:
+                        self.main_form.agency_var.set(current_value)
+                else:
+                    # Just update values
+                    self.main_form.agency_combo['values'] = tuple(agency_names)
+    
     def save_record(self):
         """Save current record to database"""
         # Validate form first
@@ -388,6 +490,27 @@ class TharuniApp:
         """Clear the main form"""
         if hasattr(self, 'main_form'):
             self.main_form.clear_form()
+    
+    def logout(self):
+        """Logout current user and show login dialog"""
+        # Reset user info
+        self.logged_in_user = None
+        self.is_admin = False
+        
+        # Show login dialog
+        self.authenticate_user()
+        
+        # Recreate UI if login successful
+        if self.logged_in_user:
+            # Destroy existing widgets
+            for widget in self.root.winfo_children():
+                widget.destroy()
+                
+            # Reinitialize UI
+            self.create_widgets()
+        else:
+            # Exit application if login failed or canceled
+            self.root.quit()
     
     def on_closing(self):
         """Handle application closing"""
