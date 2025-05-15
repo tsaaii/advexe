@@ -24,7 +24,7 @@ class SettingsPanel:
         # Initialize variables
         self.init_variables()
         
-        # Initialize weighbridge manager - FIX: Initialize before create_panel
+        # Initialize weighbridge manager
         self.weighbridge = WeighbridgeManager(self.weighbridge_callback)
         
         # Create UI components
@@ -124,8 +124,9 @@ class SettingsPanel:
         
         # Test weight display
         ttk.Label(wb_frame, text="Current Weight:").grid(row=7, column=0, sticky=tk.W, pady=2)
-        ttk.Label(wb_frame, textvariable=self.current_weight_var, 
-                 font=("Segoe UI", 10, "bold")).grid(row=7, column=1, sticky=tk.W, pady=2)
+        self.weight_label = ttk.Label(wb_frame, textvariable=self.current_weight_var, 
+                                    font=("Segoe UI", 10, "bold"))
+        self.weight_label.grid(row=7, column=1, sticky=tk.W, pady=2)
     
     def create_camera_settings(self, parent):
         """Create camera configuration settings"""
@@ -178,6 +179,7 @@ class SettingsPanel:
             if self.weighbridge.connect(com_port, baud_rate, data_bits, parity, stop_bits):
                 # Update UI
                 self.wb_status_var.set("Status: Connected")
+                self.weight_label.config(foreground="green")
                 self.connect_btn.config(state=tk.DISABLED)
                 self.disconnect_btn.config(state=tk.NORMAL)
                 messagebox.showinfo("Success", "Weighbridge connected successfully!")
@@ -190,6 +192,7 @@ class SettingsPanel:
         if self.weighbridge.disconnect():
             # Update UI
             self.wb_status_var.set("Status: Disconnected")
+            self.weight_label.config(foreground="red")
             self.connect_btn.config(state=tk.NORMAL)
             self.disconnect_btn.config(state=tk.DISABLED)
             self.current_weight_var.set("0 kg")
@@ -201,6 +204,12 @@ class SettingsPanel:
             weight: Weight value to display
         """
         self.current_weight_var.set(f"{weight:.2f} kg")
+        
+        # Update weight label color based on connection status
+        if self.wb_status_var.get() == "Status: Connected":
+            self.weight_label.config(foreground="green")
+        else:
+            self.weight_label.config(foreground="red")
         
         # Propagate weight update to form if callback is set
         if self.weighbridge_callback:

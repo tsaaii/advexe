@@ -24,8 +24,8 @@ class TharuniApp:
         """
         self.root = root
         self.root.title("Advitia Labs")
-        self.root.geometry("650x480")  # Reduced size for small windows
-        self.root.minsize(650, 480)    # Set minimum window size
+        self.root.geometry("900x580")  # Increased size to accommodate pending vehicles panel
+        self.root.minsize(900, 580)    # Set minimum window size
         
         # Set up initial configuration
         config.setup()
@@ -41,6 +41,9 @@ class TharuniApp:
         
         # Start time update
         self.update_datetime()
+        
+        # Start periodic refresh for pending vehicles
+        self.periodic_refresh()
         
         # Add window close handler
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -142,9 +145,16 @@ class TharuniApp:
         main_panel = ttk.Frame(parent, style="TFrame")
         main_panel.pack(fill=tk.BOTH, expand=True)
         
-        # Add a canvas with scrollbar for small screens
-        canvas = tk.Canvas(main_panel, bg=config.COLORS["background"], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(main_panel, orient="vertical", command=canvas.yview)
+        # Split the main panel into two parts: form and pending vehicles
+        left_panel = ttk.Frame(main_panel, style="TFrame")
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        
+        right_panel = ttk.Frame(main_panel, style="TFrame")
+        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
+        
+        # Add a canvas with scrollbar for small screens on the left panel
+        canvas = tk.Canvas(left_panel, bg=config.COLORS["background"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(left_panel, orient="vertical", command=canvas.yview)
         
         # Create a frame that will contain the form and cameras
         scrollable_frame = ttk.Frame(canvas, style="TFrame")
@@ -161,16 +171,41 @@ class TharuniApp:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Create the main form
+        # Create the main form - pass data manager for ticket lookup
         self.main_form = MainForm(
             scrollable_frame, 
             notebook=self.notebook,
-            summary_update_callback=self.update_summary
+            summary_update_callback=self.update_summary,
+            data_manager=self.data_manager
+        )
+        
+        # Create the pending vehicles panel on the right
+        from pending_vehicles_panel import PendingVehiclesPanel
+        self.pending_vehicles = PendingVehiclesPanel(
+            right_panel,
+            data_manager=self.data_manager,
+            on_vehicle_select=self.load_pending_vehicle
         )
         
         # Configure scroll region after adding content
         scrollable_frame.update_idletasks()
         canvas.configure(scrollregion=canvas.bbox("all"))
+    
+    def load_pending_vehicle(self, ticket_no):
+        """Load a pending vehicle when selected from the pending vehicles panel
+        
+        Args:
+            ticket_no: Ticket number to load
+        """
+        if hasattr(self, 'main_form'):
+            # Switch to main tab
+            self.notebook.select(0)
+            
+            # Set the ticket number in the form
+            self.main_form.rst_var.set(ticket_no)
+            
+            # Trigger the ticket existence check
+            self.main_form.check_ticket_exists()
     
     def create_buttons(self, parent):
         """Create action buttons"""
@@ -222,16 +257,27 @@ class TharuniApp:
         self.time_var.set(now.strftime("%H:%M:%S"))
         self.root.after(1000, self.update_datetime)  # Update every second
     
+    def periodic_refresh(self):
+        """Periodically refresh data displays"""
+        # Update pending vehicles list
+        self.update_pending_vehicles()
+        
+        # Schedule next refresh
+        self.root.after(60000, self.periodic_refresh)  # Refresh every minute
+    
     def update_weight_from_weighbridge(self, weight):
         """Update weight from weighbridge
         
         Args:
             weight: Weight value from weighbridge
         """
-        # Update gross weight in the main form
-        if hasattr(self, 'main_form'):
-            self.main_form.gross_weight_var.set(str(weight))
-            self.main_form.calculate_net_weight()
+        # Make the weight available to the main form
+        if hasattr(self, 'settings_panel'):
+            self.settings_panel.current_weight_var.set(f"{weight} kg")
+            
+        # Notify the settings panel to update its display
+        if hasattr(self, 'settings_panel'):
+            self.settings_panel.update_weight_display(weight)
     
     def update_camera_indices(self, front_index, back_index):
         """Update camera indices
@@ -262,16 +308,61 @@ class TharuniApp:
         # Save to database
         if self.data_manager.save_record(record_data):
             # Show success message
-            messagebox.showinfo("Success", "Record saved successfully!")
+            if record_data.get('second_weight') and record_data.get('second_timestamp'):
+                # Both weighments complete
+                messagebox.showinfo("Success", "Record completed with both weighments!")
+            else:
+                # Only first weighment
+                messagebox.showinfo("Success", "First weighment saved! Vehicle added to pending queue.")
             
-            # Update the summary
+            # Update the summary and pending vehicles
             self.update_summary()
+            self.update_pending_vehicles()
             
-            # Switch to summary tab
-            self.notebook.select(1)
+            # Generate a new ticket number for the next entry
+            self.main_form.generate_next_ticket_number()
             
-            # Clear form for next entry
-            self.clear_form()
+            # If second weighment is done, clear form for next entry
+            if record_data.get('second_weight') and record_data.get('second_timestamp'):
+                self.clear_form()
+                # Switch to summary tab
+                self.notebook.select(1)
+            else:
+                # For first weighment, just clear the vehicle number and images
+                # but keep the ticket number and agency information
+                self.main_form.vehicle_var.set("")
+                self.main_form.front_image_path = None
+                self.main_form.back_image_path = None
+                self.main_form.front_image_status_var.set("Front: ✗")
+                self.main_form.back_image_status_var.set("Back: ✗")
+                self.main_form.front_image_status.config(foreground="red")
+                self.main_form.back_image_status.config(foreground="red")
+                
+                # Reset camera displays if they were used
+                if hasattr(self.main_form, 'front_camera'):
+                    self.main_form.front_camera.stop_camera()
+                    self.main_form.front_camera.captured_image = None
+                    self.main_form.front_camera.canvas.delete("all")
+                    self.main_form.front_camera.canvas.create_text(75, 60, text="Click Capture", fill="white", justify=tk.CENTER)
+                    self.main_form.front_camera.capture_button.config(text="Capture")
+                    
+                if hasattr(self.main_form, 'back_camera'):
+                    self.main_form.back_camera.stop_camera()
+                    self.main_form.back_camera.captured_image = None
+                    self.main_form.back_camera.canvas.delete("all")
+                    self.main_form.back_camera.canvas.create_text(75, 60, text="Click Capture", fill="white", justify=tk.CENTER)
+                    self.main_form.back_camera.capture_button.config(text="Capture")
+                
+                # Reset weighment state for next entry
+                self.main_form.current_weighment = "first"
+                self.main_form.first_weight_var.set("")
+                self.main_form.first_timestamp_var.set("")
+                self.main_form.second_weight_var.set("")
+                self.main_form.second_timestamp_var.set("")
+                self.main_form.net_weight_var.set("")
+                self.main_form.first_weighment_btn.config(state=tk.NORMAL)
+                self.main_form.second_weighment_btn.config(state=tk.DISABLED)
+                
         else:
             messagebox.showerror("Error", "Failed to save record.")
     
@@ -279,6 +370,11 @@ class TharuniApp:
         """Update the summary view"""
         if hasattr(self, 'summary_panel'):
             self.summary_panel.update_summary()
+    
+    def update_pending_vehicles(self):
+        """Update the pending vehicles panel"""
+        if hasattr(self, 'pending_vehicles'):
+            self.pending_vehicles.refresh_pending_list()
     
     def view_records(self):
         """View all records in a separate window"""

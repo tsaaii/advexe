@@ -6,8 +6,8 @@ DATA_FOLDER = 'data'
 DATA_FILE = os.path.join(DATA_FOLDER, 'tharuni_data.csv')
 IMAGES_FOLDER = os.path.join(DATA_FOLDER, 'images')
 CSV_HEADER = ['Date', 'Time', 'Site Name', 'Agency Name', 'Material', 'Ticket No', 'Vehicle No', 
-              'Transfer Party Name', 'Gross Weight', 'Tare Weight', 'Net Weight', 
-              'Material Type', 'Front Image', 'Back Image']
+              'Transfer Party Name', 'First Weight', 'First Timestamp', 'Second Weight', 'Second Timestamp',
+              'Net Weight', 'Material Type', 'Front Image', 'Back Image']
 
 # Refreshed color scheme
 COLORS = {

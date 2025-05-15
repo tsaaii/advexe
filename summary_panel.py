@@ -69,26 +69,30 @@ class SummaryPanel:
         summary_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
         
         # Create treeview for table
-        columns = ("date", "vehicle", "agency", "material", "type", "weight", "images")
+        columns = ("date", "vehicle", "ticket", "agency", "material", "first_weight", "second_weight", "net_weight", "images")
         self.summary_tree = ttk.Treeview(summary_frame, columns=columns, show="headings", height=10)
         
         # Define column headings
         self.summary_tree.heading("date", text="Date")
         self.summary_tree.heading("vehicle", text="Vehicle No")
+        self.summary_tree.heading("ticket", text="Ticket No")
         self.summary_tree.heading("agency", text="Agency Name")
         self.summary_tree.heading("material", text="Material")
-        self.summary_tree.heading("type", text="Type")
-        self.summary_tree.heading("weight", text="Net Weight")
+        self.summary_tree.heading("first_weight", text="First Weight")
+        self.summary_tree.heading("second_weight", text="Second Weight")
+        self.summary_tree.heading("net_weight", text="Net Weight")
         self.summary_tree.heading("images", text="Images")
         
         # Define column widths
         self.summary_tree.column("date", width=80)
-        self.summary_tree.column("vehicle", width=100)
-        self.summary_tree.column("agency", width=100)
-        self.summary_tree.column("material", width=100)
-        self.summary_tree.column("type", width=100)
-        self.summary_tree.column("weight", width=80)
-        self.summary_tree.column("images", width=60)
+        self.summary_tree.column("vehicle", width=90)
+        self.summary_tree.column("ticket", width=70)
+        self.summary_tree.column("agency", width=90)
+        self.summary_tree.column("material", width=70)
+        self.summary_tree.column("first_weight", width=80)
+        self.summary_tree.column("second_weight", width=80)
+        self.summary_tree.column("net_weight", width=70)
+        self.summary_tree.column("images", width=50)
         
         # Add scrollbar
         summary_scrollbar = ttk.Scrollbar(summary_frame, orient=tk.VERTICAL, command=self.summary_tree.yview)
@@ -151,9 +155,11 @@ class SummaryPanel:
             self.summary_tree.insert("", tk.END, values=(
                 record.get('date', ''),
                 record.get('vehicle_no', ''),
+                record.get('ticket_no', ''),
                 record.get('agency_name', ''),
                 record.get('material', ''),
-                record.get('material_type', ''),
+                record.get('first_weight', ''),
+                record.get('second_weight', ''),
                 record.get('net_weight', ''),
                 image_info
             ))
@@ -208,7 +214,7 @@ class SummaryPanel:
         """Display details of a record in a popup window"""
         details_window = tk.Toplevel(self.parent)
         details_window.title(f"Entry Details - {record.get('vehicle_no', '')}")
-        details_window.geometry("650x450")
+        details_window.geometry("650x500")
         details_window.configure(bg=config.COLORS["background"])
         
         # Details frame
@@ -242,8 +248,10 @@ class SummaryPanel:
         row = 0
         for label, value in [
             ("Transfer Party:", record.get('transfer_party_name', '')),
-            ("Gross Weight:", record.get('gross_weight', '')),
-            ("Tare Weight:", record.get('tare_weight', '')),
+            ("First Weight:", record.get('first_weight', '')),
+            ("First Timestamp:", record.get('first_timestamp', '')),
+            ("Second Weight:", record.get('second_weight', '')),
+            ("Second Timestamp:", record.get('second_timestamp', '')),
             ("Net Weight:", record.get('net_weight', '')),
             ("Material Type:", record.get('material_type', ''))
         ]:

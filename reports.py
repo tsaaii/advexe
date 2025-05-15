@@ -144,8 +144,8 @@ def export_to_pdf(filename=None):
             
             # Create a table for the data
             # Select only relevant columns for the report
-            visible_header = ["Date", "Vehicle No", "Agency Name", "Material", "Type", "Net Weight"]
-            column_indices = [0, 6, 3, 4, 11, 10]  # Indices of columns to display
+            visible_header = ["Date", "Vehicle No", "Ticket No", "Agency Name", "Material", "First Weight", "Second Weight", "Net Weight"]
+            column_indices = [0, 6, 5, 3, 4, 8, 10, 12]  # Indices of columns to display
             
             # Extract the relevant data
             table_data = [[header[i] for i in column_indices]]
@@ -184,13 +184,13 @@ def export_to_pdf(filename=None):
             recent_records = data[-5:] if len(data) >= 5 else data
             
             for record in reversed(recent_records):  # Most recent first
-                if len(record) >= 14:  # Ensure we have all fields including images
+                if len(record) >= 16:  # Ensure we have all fields including images
                     vehicle_no = record[6]
                     date_time = f"{record[0]} {record[1]}"
                     agency = record[3]
                     material = record[4]
-                    material_type = record[11]
-                    weights = f"Gross: {record[8]} kg | Tare: {record[9]} kg | Net: {record[10]} kg"
+                    material_type = record[13]
+                    weights = f"First: {record[8]} kg | Second: {record[10]} kg | Net: {record[12]} kg"
                     
                     # Create a detail section for this record
                     elements.append(Paragraph(f"Vehicle: {vehicle_no}", styles['Heading3']))
@@ -199,8 +199,8 @@ def export_to_pdf(filename=None):
                     elements.append(Paragraph(f"Weights: {weights}", styles['Normal']))
                     
                     # Try to add images if available
-                    front_img = record[12]
-                    back_img = record[13]
+                    front_img = record[14]
+                    back_img = record[15]
                     
                     if front_img or back_img:
                         # Create a mini table for the images
